@@ -1,0 +1,150 @@
+---
+output: pdf_document
+---
+# Appendix A
+
+```{r include=FALSE, echo=FALSE}
+library(tidyverse)
+library(ggplot2)
+library(dplyr)
+library(GGally)
+library(car)
+library(corrplot)
+library(ggcorrplot)
+library(scatterplot3d)
+library(caret)
+library(e1071)
+white_wine<-read.csv("winequality-white.csv", header = TRUE, sep = ";")
+red_wine<-read.csv("winequality-red.csv", header = TRUE, sep = ";")
+```
+
+### Introduction
+
+Data summary
+
+```{r,echo= FALSE, include = TRUE, warning=FALSE}
+red_wine['color'] <- 'red'
+white_wine['color'] <- 'white'
+wine_data <- rbind(red_wine, white_wine)
+wine_data$color<-as.factor(wine_data$color)
+str(wine_data)
+levels(wine_data$color)
+```
+
+### Planning the analysis
+
+Model 1
+
+```{r,echo= FALSE, include = TRUE, warning=FALSE}
+winecolor_model1 <- glm(color ~ fixed.acidity + volatile.acidity + citric.acid +
+                         residual.sugar + chlorides + free.sulfur.dioxide + total.sulfur.dioxide + density + pH + sulphates + alcohol + quality, data = wine_data, family = binomial())
+summary(winecolor_model1)
+```
+
+Model 2
+
+```{r,echo= FALSE, include=TRUE, warning=FALSE}
+winecolor_model2 <- glm(color ~ fixed.acidity + volatile.acidity + citric.acid +
+    residual.sugar + chlorides + free.sulfur.dioxide + total.sulfur.dioxide + 
+    density +  sulphates + alcohol + quality, data = wine_data, family = binomial())
+summary(winecolor_model2)
+```
+
+Model 3
+```{r,echo= FALSE, included=TRUE, warning=FALSE}
+winecolor_model3 <- glm(color ~  volatile.acidity + citric.acid + 
+    residual.sugar + chlorides + free.sulfur.dioxide + total.sulfur.dioxide + 
+    density +  sulphates + alcohol + quality, data = wine_data, family = binomial())
+summary(winecolor_model3)
+```
+
+Model 4
+
+```{r,echo= FALSE, include = TRUE, warning=FALSE}
+#After removing that case rerun the last model
+wine_data$cooks <- cooks.distance(winecolor_model3)
+wine_data_noinf <- filter(wine_data,cooks <=1)
+winecolor_model4 <- glm(color ~ volatile.acidity + citric.acid + 
+    residual.sugar + chlorides + free.sulfur.dioxide + total.sulfur.dioxide + 
+    density +  sulphates + alcohol + quality, data = wine_data_noinf, family = binomial())
+summary(winecolor_model4)
+```
+
+### Outliers and Influential points
+
+```{r,echo= FALSE,  warning=FALSE, include = TRUE, fig.height = 4, fig.width = 4 }
+#Checking influencial Case
+
+plot(sort(wine_data$cooks, decreasing=TRUE))
+#Removing the outlier having cook distance >1
+
+```
+
+### Interpreting the Model
+
+Confidence Interval of Odds ratio
+
+```{r,echo= FALSE, include = TRUE, warning=FALSE}
+#Expressing each coefficient in odds ratio
+#exp(coef(winecolor_model4))
+#Odds ratio with 95% Confidence interval
+exp(cbind(Oddsratio = coef(winecolor_model4), confint(winecolor_model4)))
+```
+
+### Checking Assumptions of the Model
+
+Multi-collinearity using VIF
+
+```{r,echo= FALSE, include = TRUE, warning=FALSE}
+vif(winecolor_model4)
+```
+
+Linearity using Logit
+
+```{r,echo= FALSE, include = TRUE, warning=FALSE}
+wine_data_noinf$logvolatile.acidity<-log(wine_data_noinf$volatile.acidity)*wine_data_noinf$volatile.acidity
+
+wine_data_noinf$logcitric.acid<-log(wine_data_noinf$citric.acid+1)*wine_data_noinf$citric.acid
+
+wine_data_noinf$logresidual.sugar<-log(wine_data_noinf$residual.sugar)*wine_data_noinf$residual.sugar
+
+wine_data_noinf$logchlorides<-log(wine_data_noinf$chlorides)*wine_data_noinf$chlorides
+
+wine_data_noinf$logfree.sulfur.dioxide<-log(wine_data_noinf$free.sulfur.dioxide)*wine_data_noinf$free.sulfur.dioxide
+
+wine_data_noinf$logtotal.sulfur.dioxide<-log(wine_data_noinf$total.sulfur.dioxide)*wine_data_noinf$total.sulfur.dioxide
+
+wine_data_noinf$logdensity<-log(wine_data_noinf$density)*wine_data_noinf$density
+
+wine_data_noinf$logsulphates<-log(wine_data_noinf$sulphates)*wine_data_noinf$sulphates
+
+wine_data_noinf$logalcohol<-log(wine_data_noinf$alcohol)*wine_data_noinf$alcohol
+
+wine_data_noinf$logquality<-log(wine_data_noinf$quality)*wine_data_noinf$quality
+winecolor_model5 <- glm(color ~ volatile.acidity + citric.acid + 
+    residual.sugar + chlorides + free.sulfur.dioxide + total.sulfur.dioxide + 
+    density +  sulphates + alcohol + quality+logvolatile.acidity+logcitric.acid+logresidual.sugar+logchlorides+logfree.sulfur.dioxide+logtotal.sulfur.dioxide+logdensity+logsulphates+logalcohol, data = wine_data_noinf, family = binomial())
+```
+
+Independence erros using Durbin-Watson test
+
+```{r,echo= FALSE, include = TRUE, warning=FALSE}
+durbinWatsonTest(winecolor_model4)
+```
+
+### Cross Validation of Model
+
+Cross validation
+```{r,echo= FALSE,  warning=TRUE, include = TRUE}
+#crossvalidation of model
+crossvalsetting <- trainControl(method ="repeatedcv",number =10,savePredictions =  TRUE)
+crossvalidation_result <-train(as.factor(color) ~ volatile.acidity + citric.acid + 
+    residual.sugar + chlorides + free.sulfur.dioxide + total.sulfur.dioxide + 
+    density +  sulphates + alcohol + quality, data = wine_data_noinf,family ="binomial", method ="glm",trControl= crossvalsetting)
+crossvalidation_result
+#Confusionmatrix
+prediction<- predict(crossvalidation_result, newdata = wine_data_noinf )
+confusionmatrix <-confusionMatrix(data = prediction,wine_data_noinf$color)
+confusionmatrix
+
+```
